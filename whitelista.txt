@@ -1,0 +1,4 @@
+# format:
+# NickPostaci|KLUCZ-LICENCJI
+
+Test Nick|ABCD-EFGH-JKLM-NPQR
