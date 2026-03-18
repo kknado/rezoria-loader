@@ -2,8 +2,8 @@ setDefaultTab("OS")
 
 local http = modules.corelib.HTTP
 
-local LINK_WHITELISTA = "https://raw.githubusercontent.com/TWOJ_LOGIN/rezoria-loader/main/whitelista.txt"
-local LINK_PAYLOAD = "https://raw.githubusercontent.com/TWOJ_LOGIN/rezoria-loader/main/REZORIA_payload.lua"
+local LINK_WHITELISTA = "https://raw.githubusercontent.com/kknado/rezoria-loader/main/whitelista.txt"
+local LINK_PAYLOAD = "https://raw.githubusercontent.com/kknado/rezoria-loader/main/REZORIA_payload.lua"
 local PLIK_KLUCZA = "/bot/rezoria_license.txt"
 
 local function przytnij(tekst)
