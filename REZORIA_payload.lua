@@ -1015,10 +1015,6 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
     stan_systemu.countdown.etap = 2
     odswiezWidocznychGraczy()
 
-    if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
-      rozpocznijAtakNaTarget(stan_systemu.countdown.nazwa_targetu)
-    end
-
     schedule(1000, function()
       if token ~= stan_systemu.countdown.token then return end
       stan_systemu.countdown.etap = 1
@@ -1026,19 +1022,27 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
 
       schedule(1000, function()
         if token ~= stan_systemu.countdown.token then return end
-        stan_systemu.countdown.etap = "SPELL"
-        odswiezWidocznychGraczy()
 
         if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
-          wykonajSamSpellCombo()
+          rozpocznijAtakNaTarget(stan_systemu.countdown.nazwa_targetu)
         end
 
-        schedule(2000, function()
+        schedule(250, function()
           if token ~= stan_systemu.countdown.token then return end
-          stan_systemu.countdown.aktywne = false
-          stan_systemu.countdown.nazwa_targetu = nil
-          stan_systemu.countdown.etap = nil
+          stan_systemu.countdown.etap = "SPELL"
           odswiezWidocznychGraczy()
+
+          if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
+            wykonajSamSpellCombo()
+          end
+
+          schedule(2000, function()
+            if token ~= stan_systemu.countdown.token then return end
+            stan_systemu.countdown.aktywne = false
+            stan_systemu.countdown.nazwa_targetu = nil
+            stan_systemu.countdown.etap = nil
+            odswiezWidocznychGraczy()
+          end)
         end)
       end)
     end)
