@@ -10,7 +10,7 @@ local konfiguracja = {
   linki = {
     liderzy_glowni = "https://pastebin.com/raw/hAfKSBHe",
     liderzy_combo = "https://pastebin.com/raw/MjmQcLCW",
-    zielony_chat = "https://pastebin.com/raw/rDZA6CiG",
+    zielony_chat = "https://pastebin.com/raw/9PDu1CXV",
     wrogowie = "https://pastebin.com/raw/GAM8Ruu1",
     sojusznicy = "https://pastebin.com/raw/rpLJ4hdA"
   },
