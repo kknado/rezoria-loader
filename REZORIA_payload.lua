@@ -9,8 +9,8 @@ local konfiguracja = {
   kanaly_gildii = { "Second fight" },
   linki = {
     liderzy_glowni = "https://pastebin.com/raw/hAfKSBHe",
-    liderzy_combo = "https://pastebin.com/raw/hAfKSBHe",
-    zielony_chat = "https://pastebin.com/raw/9PDu1CXV",
+    liderzy_combo = "https://pastebin.com/raw/MjmQcLCW",
+    zielony_chat = "https://pastebin.com/raw/rDZA6CiG",
     wrogowie = "https://pastebin.com/raw/GAM8Ruu1",
     sojusznicy = "https://pastebin.com/raw/rpLJ4hdA"
   },
@@ -18,8 +18,7 @@ local konfiguracja = {
   "Hi Im Mateusz"
   },
   ignorowane_prefiksy = {
-    "trgt:", "odlicz:", "mam mniej niz", "stop target", "bomba, target:",
-    "silna, spell:", "cl, odznacz target", "[zaznaczanie]", "t:", "zaznacz:", "odznacz"
+    "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target"
   },
   teksty = { alert_many = "p", stop_alert_many = "x", wersja = "Version 2.0" },
   odswiezanie = {
@@ -28,24 +27,29 @@ local konfiguracja = {
   },
   kolory = {
     friend = "#FFFFFF", edms = "#50A0FF", ekrp = "#FF69B4", leader = "#FFFF00",
-    target = "#ff3c3cff", guild = "#ffa200ff", guild_special = "#00FF00"
+    target = "#ff3c3cff", guild = "#ffa200ff", guild_special = "#00FF00", guild_join = "#4DA6FF"
   },
   combo = {
-    zaklecia = { ED = "Exori Frigo Max", MS = "Exori Vis Max", RP = "Exori San Max", EK = "Exori Hur Max" },
-    item_silna = 5467
+    zaklecia = { ED = "Exori Frigo Max", MS = "Exori Vis Max", RP = "Exori San Max", EK = "Exori Hur Max" }
   }
 }
 
+-- 2. stan_systemu
+-- Biezacy stan list, targetu, countdownu, leczenia i UI cache.
 local stan_systemu = {
   listy = { liderzy = {}, zielony_chat = {}, sojusznicy = {}, wrogowie = {} },
   zawod = { moj = nil, regex = [[You see yourself%. You are an? ([^%.]+)]] },
   target = { nazwa = nil, zrodlo = nil, ostatni_nadawca = nil, ostatnia_creatura = nil },
   countdown = { aktywne = false, nazwa_targetu = nil, etap = nil, token = 0 },
-  wizual = { cache = {}, ostatni_alert_many = 0 },
+  healing = {
+    ostatni_alert_many = 0
+  },
+  wizual = { cache = {} },
   combo = { aktywne_zaklecie = nil },
   www = { indeks_wroga = 1 },
-  kanaly = { czeka_na_guild = false },
-  prosby_o_pot = {}
+  prosby_o_pot = {},
+  check = { ostatnia_odpowiedz = 0 },
+  os = { kanal_info_pokazane = false }
 }
 
 local odswiezWidocznychGraczy
@@ -53,13 +57,15 @@ local ustawAktywnyTarget
 local usunAktywnyTarget
 local uruchomCountdownDlaTargetu
 local leaderCommanderEdit
--- 2. helpery wspolne
+
+-- 3. helpery wspolne
 -- Wspolne funkcje pomocnicze bez duplikacji.
 local function przytnij(tekst)
   if type(tekst) ~= "string" then return "" end
   return (tekst:match("^%s*(.-)%s*$") or "")
 end
 
+-- 4. helpery list / normalizacji / nickow
 local function normalizeName(name)
   if not name then return "" end
   name = name:gsub("[%s%c]+", " ")
@@ -118,6 +124,19 @@ local function keyCreatury(creature)
   if creature and creature.getId then return tostring(creature:getId()) end
   if creature and creature.getName then return normalizeName(creature:getName()) end
   return ""
+end
+
+local function czyGraczZGildii(creature)
+  return creature
+    and creature:isPlayer()
+    and not creature:isLocalPlayer()
+    and creature:getEmblem() == 1
+end
+
+local function czyStoiObok(creature, pozycja_gracza)
+  if not creature or not pozycja_gracza then return false end
+  local pozycja_creatury = creature:getPosition()
+  return pozycja_creatury and getDistanceBetween(pozycja_creatury, pozycja_gracza) <= 1
 end
 
 local function czyNaEkranie(creature)
@@ -261,18 +280,12 @@ local function parsujHpMpZeStrony(html)
          liczba(mana_max)
 end
 
-local function zbudujTekstWroga(enemy, czyTarget)
-  if not enemy then
-    return czyTarget and "\nTARGET\nTUTAJ" or ""
-  end
+local function zbudujTekstWroga(enemy)
+  if not enemy then return "" end
 
   local linia1 = (enemy.Vocation ~= "" and enemy.Vocation) or "?"
   local linia2 = (enemy.hp_max or 0) > 0 and ("HP " .. formatujLiczbe(enemy.hp_max)) or "HP ..."
   local linia3 = (enemy.mana_max or 0) > 0 and ("MP " .. formatujLiczbe(enemy.mana_max)) or "MP ..."
-
-  if czyTarget then
-    return "\n" .. linia1 .. "\n" .. linia2 .. "\n" .. linia3 .. "\nTARGET"
-  end
 
   return "\n" .. linia1 .. "\n" .. linia2 .. "\n" .. linia3
 end
@@ -295,8 +308,7 @@ local function migracjaStorage()
   storage.comboLeaderParal = nil
 end
 
-migracjaStorage()
--- 3. pobieranie list HTTP
+-- 5. HTTP / pobieranie list
 -- Jedno miejsce do pobierania liderow, zielonych nickow, sojusznikow i wrogow.
 local function aktualizujLiderow()
   getNickListFromLink(konfiguracja.linki.liderzy_glowni, function(lista)
@@ -451,16 +463,7 @@ macro(1000, function()
   pobierzJednegoWrogaZWWW()
 end)
 
-stan_systemu.listy.liderzy = listaUnikalna(konfiguracja.domyslni_liderzy)
-aktualizujLiderow()
-aktualizujZielonyChat()
-aktualizujSojusznikow()
-aktualizujWrogow()
-petlaWrogowie()
-petlaSojusznicy()
-petlaLiderzy()
-
--- 4. rozpoznanie profesji
+-- 6. rozpoznanie profesji
 -- Jedna logika rozpoznania profesji przez look + onTextMessage.
 local function ustawProfesjeZTresci(tekst)
   local vocation = tostring(tekst or ""):match(stan_systemu.zawod.regex)
@@ -478,12 +481,12 @@ local function checkMyVocation()
   end
 end
 
-checkMyVocation()
-
--- 4.5 auto dolaczanie do guild chatu
--- Jedna logika dolaczania do guild chatu, bez duplikacji schedulerow.
+-- 7. guild chat / OS
+-- Logika dolaczania do kanalu gildii, przekazywania OS na Default i obslugi technicznych wiadomosci.
 local function joinGuildChannelIfNeeded()
   if not g_game.isOnline() then return end
+
+  local nazwa_kanalu = tostring(konfiguracja.kanaly_gildii[1] or "Guild")
 
   for _, channelName in ipairs(konfiguracja.kanaly_gildii) do
     if console.getTab(channelName) then
@@ -491,37 +494,22 @@ local function joinGuildChannelIfNeeded()
     end
   end
 
-  if not stan_systemu.kanaly.czeka_na_guild then
-    stan_systemu.kanaly.czeka_na_guild = true
-    g_game.requestChannels()
-  end
+  g_game.joinChannel(0)
+
+  schedule(500, function()
+    if console.getTab(nazwa_kanalu) then
+      local tab = console.getTab("Default") or console.addTab("Default", true)
+      if tab then
+        console.addText("[OS] Joined Guild Channel: " .. nazwa_kanalu, { color = konfiguracja.kolory.guild_join }, "Default", "")
+      end
+    end
+  end)
 end
 
 macro(5000, joinGuildChannelIfNeeded)
 
-onChannelList(function(channelList)
-  if not stan_systemu.kanaly.czeka_na_guild then return end
-  stan_systemu.kanaly.czeka_na_guild = false
-
-  for _, entry in pairs(channelList or {}) do
-    local channelId = entry[1]
-    local channelName = entry[2]
-
-    if nazwaNaLiscie(channelName, konfiguracja.kanaly_gildii) then
-      g_game.joinChannel(channelId)
-      return
-    end
-  end
-end)
-
--- 5. guild chat / OS
--- Przekazywanie guild na Default, filtrowanie prefiksow i zielony chat.
 local function czyIgnorowanyPrefix(tekst)
   local lower = normalizeName(tekst)
-
-  if lower == "p" or lower == "x" then
-    return true
-  end
 
   for _, prefix in ipairs(konfiguracja.ignorowane_prefiksy) do
     if lower:sub(1, #prefix) == prefix then return true end
@@ -529,9 +517,15 @@ local function czyIgnorowanyPrefix(tekst)
   return false
 end
 
+local function czyTechnicznaProsbaOPot(tekst)
+  local lower = normalizeName(tekst)
+  return lower == normalizeName(konfiguracja.teksty.alert_many)
+    or lower == normalizeName(konfiguracja.teksty.stop_alert_many)
+end
+
 local function addGuildMessageToDefault(name, level, text, broadcast)
   if type(text) ~= "string" then return end
-  if czyIgnorowanyPrefix(text) then return end
+  if czyTechnicznaProsbaOPot(text) or czyIgnorowanyPrefix(text) then return end
 
   local kolor = (broadcast or isSpecialName(name)) and konfiguracja.kolory.guild_special or konfiguracja.kolory.guild
   local tab = console.getTab("Default") or console.addTab("Default", true)
@@ -551,14 +545,17 @@ local function sendGuildMessage()
   if console.getCurrentTab() == nil or #console.consoleTextEdit:getText() == 0 or not console.isChatEnabled() then
     return
   end
+
   local message = console.consoleTextEdit:getText()
   console.consoleTextEdit:clearText()
   message = message:gsub("^(%s*)(.*)", "%2")
   if #message == 0 then return end
+
   if message:sub(1, 3) == "/g " then
     g_game.talkChannel(7, 0, message:sub(4))
     return
   end
+
   console.sendMessage(message)
 end
 
@@ -573,9 +570,7 @@ local function czyGraczObok(name)
   local widoczni = getSpectators(myPos, false, true, 1, 1, 1, 1)
 
   for _, creature in ipairs(widoczni) do
-    if creature:isPlayer()
-    and not creature:isLocalPlayer()
-    and creature:getEmblem() == 1
+    if czyGraczZGildii(creature)
     and normalizeName(creature:getName()) == normalizeName(name) then
       return creature
     end
@@ -587,11 +582,19 @@ end
 local function obsluzProsbeOPot(nadawca, text)
   local nick = normalizeName(nadawca)
   local tresc = normalizeName(text)
+  local teraz = now
 
   if nick == "" then return end
 
   if tresc == normalizeName(konfiguracja.teksty.alert_many) then
-    stan_systemu.prosby_o_pot[nick] = true
+    if not stan_systemu.prosby_o_pot[nick] then
+      stan_systemu.prosby_o_pot[nick] = {
+        czas_pierwszego_zgloszenia = teraz,
+        czas_ostatniego_zgloszenia = teraz
+      }
+    else
+      stan_systemu.prosby_o_pot[nick].czas_ostatniego_zgloszenia = teraz
+    end
     return
   end
 
@@ -601,98 +604,146 @@ local function obsluzProsbeOPot(nadawca, text)
   end
 end
 
--- 6. guild healing
--- Leczenie gildii + alert many i reakcje wg profesji.
-local guildhealing = macro(200, "Guild Healing", function()
+local function obsluzCheckLidera(nadawca, text)
+  if type(text) ~= "string" then return end
+  if normalizeName(text) ~= "!check" then return end
+  if not czyToLider(nadawca) then return end
+  if czyToJa(nadawca) then return end
+
+  if now - (stan_systemu.check.ostatnia_odpowiedz or 0) < 5000 then
+    return
+  end
+
+  stan_systemu.check.ostatnia_odpowiedz = now
+
+  local opoznienie = math.random(100, 800)
+  schedule(opoznienie, function()
+    wyslijWiadomoscGildii("OS Version 3.0")
+  end)
+end
+
+-- 8. healing
+-- Rozdzielone makra: SIO odpowiada tylko za heal po HP, a POT KOGOS za p/x i lokalny wybor najstarszej aktywnej prosby obok.
+local function czyKtosZGildiiStoiObok()
   local lp = pobierzLokalnegoGracza()
-  if not lp then return end
+  if not lp then return false end
+
+  local myPos = lp:getPosition()
+  for _, creature in ipairs(getSpectators(myPos, false, true, 1, 1, 1, 1)) do
+    if czyGraczZGildii(creature) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function wykonajSioNaGraczuZGildii()
+  local lp = pobierzLokalnegoGracza()
+  if not lp then return false end
 
   local myPos = lp:getPosition()
 
-  local blisko_gildia = false
-  local widoczni_blisko = getSpectators(myPos, false, true, 1, 1, 1, 1)
-
-  for _, creature in ipairs(widoczni_blisko) do
-    if creature:isPlayer() and not creature:isLocalPlayer() and creature:getEmblem() == 1 then
-      blisko_gildia = true
-      break
-    end
-  end
-
-  -- 1. wysylanie p/x przez ED i MS
-  if stan_systemu.zawod.moj == "MS" or stan_systemu.zawod.moj == "ED" then
-    if blisko_gildia then
-      if manapercent() <= 75 and stan_systemu.wizual.ostatni_alert_many ~= 1 then
-        if wyslijWiadomoscGildii(konfiguracja.teksty.alert_many) then
-          stan_systemu.wizual.ostatni_alert_many = 1
-        end
-      elseif manapercent() > 85 and stan_systemu.wizual.ostatni_alert_many ~= 0 then
-        if wyslijWiadomoscGildii(konfiguracja.teksty.stop_alert_many) then
-          stan_systemu.wizual.ostatni_alert_many = 0
-        end
-      end
-    end
-  end
-
-  -- 2. auto-heal gildii po hp
   for _, creature in ipairs(getSpectators()) do
-    if creature:isPlayer() and not creature:isLocalPlayer() and creature:getEmblem() == 1 then
-      local hp = creature:getHealthPercent()
-      if hp <= 80 then
-        if stan_systemu.zawod.moj == "ED" then
-          if manapercent() > 85 then
-            saySpell('exura sio "' .. creature:getName() .. '"', 100)
-            return
-          end
-        elseif stan_systemu.zawod.moj == "RP" then
-          local cPos = creature:getPosition()
-          if cPos and getDistanceBetween(cPos, myPos) <= 1 and hppercent() > 90 then
-            useWith(7642, creature)
-            return
-          end
-        elseif stan_systemu.zawod.moj == "EK" then
-          local cPos = creature:getPosition()
-          if cPos and getDistanceBetween(cPos, myPos) <= 1 and hppercent() > 90 then
-            useWith(7644, creature)
-            return
-          end
+    if czyGraczZGildii(creature) and creature:getHealthPercent() <= 80 then
+      if stan_systemu.zawod.moj == "ED" and manapercent() > 85 then
+        saySpell('exura sio "' .. creature:getName() .. '"', 100)
+        return true
+      end
+
+      if stan_systemu.zawod.moj == "RP" and hppercent() > 90 and czyStoiObok(creature, myPos) then
+        useWith(7642, creature)
+        return true
+      end
+    end
+  end
+
+  return false
+end
+
+local function wyslijAlertManyJesliTrzeba()
+  local zawod = stan_systemu.zawod.moj
+  if zawod ~= "ED" and zawod ~= "MS" and zawod ~= "RP" then return end
+  if not czyKtosZGildiiStoiObok() then return end
+
+  if manapercent() <= 75 and stan_systemu.healing.ostatni_alert_many ~= 1 then
+    if wyslijWiadomoscGildii(konfiguracja.teksty.alert_many) then
+      stan_systemu.healing.ostatni_alert_many = 1
+    end
+    return
+  end
+
+  if manapercent() > 85 and stan_systemu.healing.ostatni_alert_many ~= 0 then
+    if wyslijWiadomoscGildii(konfiguracja.teksty.stop_alert_many) then
+      stan_systemu.healing.ostatni_alert_many = 0
+    end
+  end
+end
+
+local function wybierzNajstarszegoLokalnegoProszacego(myPos)
+  local prog_swiezej_prosby_ms = 1500
+  local wybrany_swiezy_gracz
+  local wybrany_swiezy_czas
+  local wybrany_stabilny_gracz
+  local wybrany_stabilny_czas
+  local teraz = now
+
+  -- Gdy obok jest swiezy burst, wygrywa najnowsze ostatnie "p".
+  -- Gdy nikt lokalnie nie odswiezyl prosby niedawno, wracamy do stabilnego porzadku po pierwszym "p".
+  for nick, wpis in pairs(stan_systemu.prosby_o_pot) do
+    local proszacy = czyGraczObok(nick)
+
+    if proszacy and czyStoiObok(proszacy, myPos) and type(wpis) == "table" then
+      local czas_pierwszego = tonumber(wpis.czas_pierwszego_zgloszenia) or teraz
+      local czas_ostatniego = tonumber(wpis.czas_ostatniego_zgloszenia) or czas_pierwszego
+
+      if teraz - czas_ostatniego <= prog_swiezej_prosby_ms then
+        if not wybrany_swiezy_czas or czas_ostatniego > wybrany_swiezy_czas then
+          wybrany_swiezy_czas = czas_ostatniego
+          wybrany_swiezy_gracz = proszacy
         end
+      elseif not wybrany_stabilny_czas or czas_pierwszego < wybrany_stabilny_czas then
+        wybrany_stabilny_czas = czas_pierwszego
+        wybrany_stabilny_gracz = proszacy
       end
     end
   end
 
-  -- 3. potowanie aktywnych proszacych
-  for nick, _ in pairs(stan_systemu.prosby_o_pot) do
-  local proszacy = czyGraczObok(nick)
-  if proszacy then
-    local cPos = proszacy:getPosition()
-    if cPos and getDistanceBetween(cPos, myPos) <= 1 then
-      if (stan_systemu.zawod.moj == "ED" or stan_systemu.zawod.moj == "MS") and manapercent() > 85 then
-        useWith(9112, proszacy)
-        return
-      end
+  return wybrany_swiezy_gracz or wybrany_stabilny_gracz
+end
 
-      if stan_systemu.zawod.moj == "RP" and hppercent() > 80 then
-        useWith(7642, proszacy)
-        return
-      end
+local function wykonajPotowanieProsby()
+  local lp = pobierzLokalnegoGracza()
+  if not lp then return false end
 
-      if stan_systemu.zawod.moj == "EK" and hppercent() > 80 then
-        useWith(7644, proszacy)
-        return
-      end
-    end
-  else
-    stan_systemu.prosby_o_pot[nick] = nil
+  local myPos = lp:getPosition()
+  local proszacy = wybierzNajstarszegoLokalnegoProszacego(myPos)
+  if not proszacy then return false end
+
+  if (stan_systemu.zawod.moj == "ED" or stan_systemu.zawod.moj == "MS") and manapercent() > 85 then
+    useWith(9112, proszacy)
+    return true
   end
+
+  if stan_systemu.zawod.moj == "RP" and hppercent() > 80 then
+    useWith(7642, proszacy)
+    return true
   end
+
+  return false
+end
+
+macro(200, "SIO", function()
+  wykonajSioNaGraczuZGildii()
 end)
 
--- 7. combo leader hotkeys
--- Sekcja celowo pusta: ten OS odbiera komendy, nie wysyla ich.
+macro(200, "POT KOGOS", function()
+  wyslijAlertManyJesliTrzeba()
+  wykonajPotowanieProsby()
+end)
 
--- 8. combo follower
--- Reakcja followera na komendy lidera: atak, spell, silna + item 5467.
+-- 9. combo
+-- Reakcja followera na aktualne komendy lidera: trgt, bomba, odlicz i czyszczenie targetu.
 local function anulujAktualnyAtak()
   if g_game.isAttacking() then
     if g_game.cancelAttackAndFollow then
@@ -707,41 +758,18 @@ local m_combo = macro(200, "COMBO", function()
 end)
 addIcon("m_combo", { item = 3457, text = "combo" }, m_combo)
 
-local function znajdzItemBezpiecznie(itemID)
-  if type(findItem) == "function" then return findItem(itemID) end
-  for _, container in pairs(getContainers()) do
-    for _, item in pairs(container:getItems()) do
-      if item:getId() == itemID then return item end
-    end
-  end
-  return nil
-end
-
 local function uzyjComboSpell()
   if stan_systemu.combo.aktywne_zaklecie and stan_systemu.combo.aktywne_zaklecie ~= "" then
     say(stan_systemu.combo.aktywne_zaklecie)
   end
 end
 
-local function uzyjSilnaItem(target)
-  if not target then return false end
-  if stan_systemu.zawod.moj ~= "RP" and stan_systemu.zawod.moj ~= "EK" then return false end
-  local item = znajdzItemBezpiecznie(konfiguracja.combo.item_silna)
-  if item then
-    g_game.useWith(item, target)
-    return true
-  end
-  return false
-end
-
-local function wykonajAkcjeCombo(nazwaTargetu, czySilna, tylkoAtak)
-  if m_combo.isOff() then return end
-
+local function rozpocznijAtakNaTarget(nazwaTargetu)
   local clean = przytnij(nazwaTargetu)
-  if clean == "" then return end
+  if clean == "" then return nil end
 
   local target = getCreatureByName(clean)
-  if not target or not target:isPlayer() or not czyNaEkranie(target) then return end
+  if not target or not target:isPlayer() or not czyNaEkranie(target) then return nil end
 
   local aktualny = g_game.getAttackingCreature()
   if aktualny ~= target then
@@ -750,62 +778,34 @@ local function wykonajAkcjeCombo(nazwaTargetu, czySilna, tylkoAtak)
   end
 
   stan_systemu.target.ostatnia_creatura = target
+  return target
+end
 
-  if tylkoAtak then return end
+local function wykonajAkcjeCombo(nazwaTargetu)
+  if m_combo.isOff() then return end
+  if not rozpocznijAtakNaTarget(nazwaTargetu) then return end
 
-  if czySilna then
-    if not uzyjSilnaItem(target) then
-      uzyjComboSpell()
-    end
-  else
-    uzyjComboSpell()
-  end
+  uzyjComboSpell()
 end
 
 local function zaplanujKomendeCombo(komenda, cel, nadawca)
   local clean = przytnij(cel)
   if clean == "" then return end
 
-  if (komenda == "trgt" or komenda == "zaznacz") and m_combo.isOff() then
-    ustawAktywnyTarget(clean, komenda, nadawca)
-
-    local target = getCreatureByName(clean)
-    if target and target:isPlayer() and czyNaEkranie(target) then
-      g_game.attack(target)
-      stan_systemu.target.ostatnia_creatura = target
-    end
-
+  if komenda == "trgt" then
+    ustawAktywnyTarget(clean, "trgt", nadawca)
+    rozpocznijAtakNaTarget(clean)
     odswiezWidocznychGraczy()
     return
   end
 
-  if (komenda == "bomba" or komenda == "silna" or komenda == "odlicz") and m_combo.isOff() then
-    return
-  end
-
-  if komenda == "trgt" or komenda == "zaznacz" then
-    ustawAktywnyTarget(clean, komenda, nadawca)
-
-    local target = getCreatureByName(clean)
-    if target and target:isPlayer() and czyNaEkranie(target) then
-      g_game.attack(target)
-      stan_systemu.target.ostatnia_creatura = target
-    end
-
-    odswiezWidocznychGraczy()
+  if m_combo.isOff() then
     return
   end
 
   if komenda == "bomba" then
-    ustawAktywnyTarget(clean, komenda, nadawca)
-    wykonajAkcjeCombo(clean, false, false)
-    odswiezWidocznychGraczy()
-    return
-  end
-
-  if komenda == "silna" then
-    ustawAktywnyTarget(clean, komenda, nadawca)
-    wykonajAkcjeCombo(clean, true, false)
+    ustawAktywnyTarget(clean, "bomba", nadawca)
+    wykonajAkcjeCombo(clean)
     odswiezWidocznychGraczy()
     return
   end
@@ -816,8 +816,8 @@ local function zaplanujKomendeCombo(komenda, cel, nadawca)
   end
 end
 
--- 9. recognize / enemy / allied / target mark
--- Jeden system markerow: leader, target, enemy, allied/friend.
+-- 10. recognize / markery
+-- Priorytety markerow: countdown, target z trgt, leader, enemy z WWW, sojusznik.
 local recognizeMacro = macro(konfiguracja.odswiezanie.znaczniki_ms, "Recognize", function()
   odswiezWidocznychGraczy()
 end)
@@ -831,6 +831,10 @@ local function pobierzTekstOdliczania()
   return ""
 end
 
+local function pobierzTekstTargetu()
+  return "\nTARGET\nTUTAJ"
+end
+
 local function pobierzStylCreatury(creature)
   if not creature or not creature:isPlayer() or creature:isLocalPlayer() then return nil end
 
@@ -842,19 +846,18 @@ local function pobierzStylCreatury(creature)
     return { info = konfiguracja.kolory.target, text = pobierzTekstOdliczania(), textColor = "yellow", square = "red", marked = "red" }
   end
 
-  if stan_systemu.target.nazwa and normalizeName(stan_systemu.target.nazwa) == key then
-  local napis = zbudujTekstWroga(enemy, true)
-  return { info = konfiguracja.kolory.target, text = napis, textColor = "red", square = "red", marked = "red" }
-end
+  if stan_systemu.target.zrodlo == "trgt" and stan_systemu.target.nazwa and normalizeName(stan_systemu.target.nazwa) == key then
+    return { info = konfiguracja.kolory.target, text = pobierzTekstTargetu(), textColor = "red", square = "red", marked = "red" }
+  end
 
   if czyToLider(name) then
-  return { info = konfiguracja.kolory.leader, text = "\nL", textColor = "yellow", square = "yellow", marked = "" }
-end
+    return { info = konfiguracja.kolory.leader, text = "\nL", textColor = "yellow", square = "yellow", marked = "" }
+  end
 
   if enemy then
-  local infoHex, colorName = kolorProfesji(enemy.Vocation)
-  return { info = infoHex, text = zbudujTekstWroga(enemy, false), textColor = colorName, square = colorName, marked = "" }
-end
+    local infoHex, colorName = kolorProfesji(enemy.Vocation)
+    return { info = infoHex, text = zbudujTekstWroga(enemy), textColor = colorName, square = colorName, marked = "" }
+  end
 
   if czySojusznik(name, creature) then
     return { info = konfiguracja.kolory.friend, text = "\nF", textColor = "white", square = "white", marked = "" }
@@ -948,7 +951,7 @@ local function policzGraczyNaEkranie()
   return enemies, guildies
 end
 
--- 10. target
+-- 11. target
 -- Jedna logika aktywnego targetu bez warstwy zmiany wygladu.
 ustawAktywnyTarget = function(nazwa, zrodlo, nadawca)
   local clean = przytnij(nazwa)
@@ -982,15 +985,16 @@ usunAktywnyTarget = function()
   stan_systemu.target.nazwa = nil
   stan_systemu.target.zrodlo = nil
   stan_systemu.target.ostatnia_creatura = nil
+  stan_systemu.countdown.token = (stan_systemu.countdown.token or 0) + 1
   stan_systemu.countdown.aktywne = false
   stan_systemu.countdown.nazwa_targetu = nil
   stan_systemu.countdown.etap = nil
 end
 
--- 11. countdown
+-- 12. countdown
 -- Odliczanie 3-2-1-SPELL na aktualnym targetcie komendy lidera.
 uruchomCountdownDlaTargetu = function(targetName, nadawca)
-  if not ustawAktywnyTarget(targetName, "odliczanie", nadawca) then return end
+  if not ustawAktywnyTarget(targetName, "odlicz", nadawca) then return end
 
   stan_systemu.countdown.token = stan_systemu.countdown.token + 1
   local token = stan_systemu.countdown.token
@@ -1015,7 +1019,7 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
         odswiezWidocznychGraczy()
 
         if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
-          wykonajAkcjeCombo(stan_systemu.countdown.nazwa_targetu, false)
+          wykonajAkcjeCombo(stan_systemu.countdown.nazwa_targetu)
         end
 
         schedule(2000, function()
@@ -1030,10 +1034,10 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
   end)
 end
 
--- 12. widgety i refreshe
--- Widgety mapy, parser komend lidera i jedyne petle odswiezania.
+-- 13. widgety / UI
+-- Widgety mapy i podsumowanie widocznych graczy.
 addLabel("", "v Commander Name v")
-leaderCommanderEdit = UI.TextEdit(storage.comboLeader or "Gladiator", function(widget, newText)
+leaderCommanderEdit = UI.TextEdit(storage.comboLeader or "Hi Im Mateusz", function(widget, newText)
   local nowy = przytnij(newText)
   storage.comboLeader = nowy
   odswiezWidocznychGraczy()
@@ -1078,35 +1082,25 @@ macro(konfiguracja.odswiezanie.licznik_ms, function()
   enemyWidget:setColoredText({ "E: ", "white", e, "red" })
 end)
 
+-- 14. eventy / init
+-- Parser aktualnych komend lidera, hooki eventow oraz uruchomienie petli startowych.
 local function parsujKomendeLidera(text)
   local t = przytnij(text)
   local tl = normalizeName(t)
   if t == "" then return nil, nil end
 
-  local cel = t:match("^trgt:%s*(.+)$")
+  local cel = t:match("^[Tt][Rr][Gg][Tt]:%s*(.+)$")
   if cel then return "trgt", przytnij(cel) end
 
-  cel = t:match("^zaznacz:%s*(.+)$")
-  if cel then return "zaznacz", przytnij(cel) end
-
-  cel = t:match("^Bomba,%s*target:%s*(.+)$") or t:match("^bomba,%s*target:%s*(.+)$")
-  if cel then return "bomba", przytnij(cel) end
-
-  cel = t:match("^t:%s*(.+)$")
-  if cel then return "bomba", przytnij(cel) end
-
-  cel = t:match("^Silna,%s*spell:%s*(.+)$") or t:match("^silna,%s*spell:%s*(.+)$")
-  if cel then return "silna", przytnij(cel) end
-
-  cel = t:match("^odlicz:%s*(.+)$")
+  cel = t:match("^[Oo][Dd][Ll][Ii][Cc][Zz]:%s*(.+)$")
   if cel then return "odlicz", przytnij(cel) end
 
-  cel = t:match("^%[Zaznaczanie%]%s*(.+)$") or t:match("^%[zaznaczanie%]%s*(.+)$")
-  if cel then return "zaznacz", przytnij(cel) end
+  cel = t:match("^[Bb][Oo][Mm][Bb][Aa],%s*[Tt][Aa][Rr][Gg][Ee][Tt]:%s*(.+)$")
+  if cel then return "bomba", przytnij(cel) end
 
-  if tl:match("^stop target%s*$") then return "odznacz", nil end
-  if tl:match("^cl,%s*odznacz target%s*$") then return "odznacz", nil end
-  if tl:match("^odznacz%s*$") then return "odznacz", nil end
+  if tl == "cl, odznacz target" then
+    return "odznacz", nil
+  end
 
   return nil, nil
 end
@@ -1131,7 +1125,7 @@ local function obsluzKomendeLidera(nadawca, text)
   if not komenda then return end
   if not czyToLider(nadawca) then return end
 
-  if czyToJa(nadawca) and (komenda == "trgt" or komenda == "zaznacz") then
+  if czyToJa(nadawca) and komenda == "trgt" then
     return
   end
 
@@ -1143,26 +1137,7 @@ local function obsluzKomendeLidera(nadawca, text)
   end
 
   if not cel or cel == "" then return end
-
-  if komenda == "trgt" or komenda == "zaznacz" then
-    zaplanujKomendeCombo(komenda, cel, nadawca)
-    return
-  end
-
-  if komenda == "odlicz" then
-    zaplanujKomendeCombo("odlicz", cel, nadawca)
-    return
-  end
-
-  if komenda == "bomba" then
-    zaplanujKomendeCombo("bomba", cel, nadawca)
-    return
-  end
-
-  if komenda == "silna" then
-    zaplanujKomendeCombo("silna", cel, nadawca)
-    return
-  end
+  zaplanujKomendeCombo(komenda, cel, nadawca)
 end
 
 onTalk(function(name, level, mode, text, channelId, _)
@@ -1173,6 +1148,7 @@ onTalk(function(name, level, mode, text, channelId, _)
   if czy_guild then
     addGuildMessageToDefault(name, level, text, false)
     obsluzProsbeOPot(name, text)
+	obsluzCheckLidera(name, text)
     obsluzKomendeLidera(name, text)
   end
 
@@ -1210,3 +1186,18 @@ onCreatureDisappear(function(creature)
     stan_systemu.target.ostatnia_creatura = nil
   end
 end)
+
+migracjaStorage()
+if leaderCommanderEdit and leaderCommanderEdit.setText then
+  leaderCommanderEdit:setText(storage.comboLeader or "Gladiator")
+end
+
+stan_systemu.listy.liderzy = listaUnikalna(konfiguracja.domyslni_liderzy)
+aktualizujLiderow()
+aktualizujZielonyChat()
+aktualizujSojusznikow()
+aktualizujWrogow()
+petlaWrogowie()
+petlaSojusznicy()
+petlaLiderzy()
+checkMyVocation()
