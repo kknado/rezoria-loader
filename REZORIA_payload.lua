@@ -782,7 +782,7 @@ local function zatrzymajSpamCombo()
   stan_systemu.combo.spam_do_czasu = 0
 end
 
-macro(500, "SPAM COMBO", function()
+macro(100, "SPAM COMBO", function()
   if m_combo.isOff() then return end
   if now > (stan_systemu.combo.spam_do_czasu or 0) then return end
 
