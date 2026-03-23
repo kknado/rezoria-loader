@@ -18,7 +18,7 @@ local konfiguracja = {
   "Hi Im Mateusz"
   },
   ignorowane_prefiksy = {
-    "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target"
+    "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target", "OS Version 3.0"
   },
   teksty = { alert_many = "p", stop_alert_many = "x", wersja = "Version 3.0" },
   odswiezanie = {
