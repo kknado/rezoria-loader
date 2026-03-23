@@ -18,7 +18,7 @@ local konfiguracja = {
   "Hi Im Mateusz"
   },
   ignorowane_prefiksy = {
-    "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target", "OS Version 3.0"
+    "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target"
   },
   teksty = { alert_many = "p", stop_alert_many = "x", wersja = "Version 3.0" },
   odswiezanie = {
@@ -521,6 +521,8 @@ local function czyTechnicznaProsbaOPot(tekst)
   local lower = normalizeName(tekst)
   return lower == normalizeName(konfiguracja.teksty.alert_many)
     or lower == normalizeName(konfiguracja.teksty.stop_alert_many)
+    or lower == "!check"
+    or lower == "os version 3.0"
 end
 
 local function addGuildMessageToDefault(name, level, text, broadcast)
