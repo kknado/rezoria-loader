@@ -45,7 +45,10 @@ local stan_systemu = {
     ostatni_alert_many = 0
   },
   wizual = { cache = {} },
-  combo = { aktywne_zaklecie = nil },
+  combo = {
+    aktywne_zaklecie = nil,
+    spam_do_czasu = 0
+  },
   www = { indeks_wroga = 1 },
   prosby_o_pot = {},
   check = { ostatnia_odpowiedz = 0 },
@@ -760,6 +763,29 @@ local m_combo = macro(200, "COMBO", function()
 end)
 addIcon("m_combo", { item = 3457, text = "combo" }, m_combo)
 
+macro(500, "SPAM COMBO", function()
+  if m_combo.isOff() then return end
+  if now > (stan_systemu.combo.spam_do_czasu or 0) then return end
+
+  local nazwa_targetu = stan_systemu.target.nazwa
+  if not nazwa_targetu or nazwa_targetu == "" then
+    zatrzymajSpamCombo()
+    return
+  end
+
+  local target = getCreatureByName(nazwa_targetu)
+  if not target or not target:isPlayer() or not czyNaEkranie(target) then
+    zatrzymajSpamCombo()
+    return
+  end
+
+  if stan_systemu.countdown.aktywne then
+    return
+  end
+
+  uzyjComboSpell()
+end)
+
 local function uzyjComboSpell()
   if stan_systemu.combo.aktywne_zaklecie and stan_systemu.combo.aktywne_zaklecie ~= "" then
     say(stan_systemu.combo.aktywne_zaklecie)
@@ -769,6 +795,14 @@ end
 local function wykonajSamSpellCombo()
   if m_combo.isOff() then return end
   uzyjComboSpell()
+end
+
+local function uruchomSpamComboNaCzas(czas_ms)
+  stan_systemu.combo.spam_do_czasu = now + (czas_ms or 20000)
+end
+
+local function zatrzymajSpamCombo()
+  stan_systemu.combo.spam_do_czasu = 0
 end
 
 local function rozpocznijAtakNaTarget(nazwaTargetu)
@@ -996,6 +1030,7 @@ usunAktywnyTarget = function()
   stan_systemu.countdown.aktywne = false
   stan_systemu.countdown.nazwa_targetu = nil
   stan_systemu.countdown.etap = nil
+  zatrzymajSpamCombo()
 end
 
 -- 12. countdown
@@ -1034,6 +1069,7 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
 
           if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
             wykonajSamSpellCombo()
+            uruchomSpamComboNaCzas(20000)
           end
 
           schedule(2000, function()
