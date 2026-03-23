@@ -20,7 +20,7 @@ local konfiguracja = {
   ignorowane_prefiksy = {
     "trgt:", "odlicz:", "bomba, target:", "cl, odznacz target"
   },
-  teksty = { alert_many = "p", stop_alert_many = "x", wersja = "Version 2.0" },
+  teksty = { alert_many = "p", stop_alert_many = "x", wersja = "Version 3.0" },
   odswiezanie = {
     wrogowie_ms = 300000, sojusznicy_ms = 60000, liderzy_ms = 120000,
     znaczniki_ms = 150, licznik_ms = 1000, www_cache_ms = 630000, www_blad_ms = 630000
