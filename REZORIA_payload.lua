@@ -766,6 +766,11 @@ local function uzyjComboSpell()
   end
 end
 
+local function wykonajSamSpellCombo()
+  if m_combo.isOff() then return end
+  uzyjComboSpell()
+end
+
 local function rozpocznijAtakNaTarget(nazwaTargetu)
   local clean = przytnij(nazwaTargetu)
   if clean == "" then return nil end
@@ -1010,6 +1015,10 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
     stan_systemu.countdown.etap = 2
     odswiezWidocznychGraczy()
 
+    if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
+      rozpocznijAtakNaTarget(stan_systemu.countdown.nazwa_targetu)
+    end
+
     schedule(1000, function()
       if token ~= stan_systemu.countdown.token then return end
       stan_systemu.countdown.etap = 1
@@ -1021,7 +1030,7 @@ uruchomCountdownDlaTargetu = function(targetName, nadawca)
         odswiezWidocznychGraczy()
 
         if stan_systemu.countdown.nazwa_targetu and stan_systemu.countdown.nazwa_targetu ~= "" then
-          wykonajAkcjeCombo(stan_systemu.countdown.nazwa_targetu)
+          wykonajSamSpellCombo()
         end
 
         schedule(2000, function()
