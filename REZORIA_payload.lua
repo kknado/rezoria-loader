@@ -763,6 +763,25 @@ local m_combo = macro(200, "COMBO", function()
 end)
 addIcon("m_combo", { item = 3457, text = "combo" }, m_combo)
 
+local function uzyjComboSpell()
+  if stan_systemu.combo.aktywne_zaklecie and stan_systemu.combo.aktywne_zaklecie ~= "" then
+    say(stan_systemu.combo.aktywne_zaklecie)
+  end
+end
+
+local function wykonajSamSpellCombo()
+  if m_combo.isOff() then return end
+  uzyjComboSpell()
+end
+
+local function uruchomSpamComboNaCzas(czas_ms)
+  stan_systemu.combo.spam_do_czasu = now + (czas_ms or 20000)
+end
+
+local function zatrzymajSpamCombo()
+  stan_systemu.combo.spam_do_czasu = 0
+end
+
 macro(500, "SPAM COMBO", function()
   if m_combo.isOff() then return end
   if now > (stan_systemu.combo.spam_do_czasu or 0) then return end
@@ -785,25 +804,6 @@ macro(500, "SPAM COMBO", function()
 
   uzyjComboSpell()
 end)
-
-local function uzyjComboSpell()
-  if stan_systemu.combo.aktywne_zaklecie and stan_systemu.combo.aktywne_zaklecie ~= "" then
-    say(stan_systemu.combo.aktywne_zaklecie)
-  end
-end
-
-local function wykonajSamSpellCombo()
-  if m_combo.isOff() then return end
-  uzyjComboSpell()
-end
-
-local function uruchomSpamComboNaCzas(czas_ms)
-  stan_systemu.combo.spam_do_czasu = now + (czas_ms or 20000)
-end
-
-local function zatrzymajSpamCombo()
-  stan_systemu.combo.spam_do_czasu = 0
-end
 
 local function rozpocznijAtakNaTarget(nazwaTargetu)
   local clean = przytnij(nazwaTargetu)
