@@ -559,15 +559,7 @@ local function sendGuildMessage()
   if #message == 0 then return end
 
   if message:sub(1, 3) == "/g " then
-    local tresc_guild = message:sub(4)
-    g_game.talkChannel(7, 0, tresc_guild)
-
-    local lp = pobierzLokalnegoGracza()
-    local moje_imie = lp and lp:getName() or ""
-
-    obsluzCheckLidera(moje_imie, tresc_guild)
-    obsluzKomendeBattleHide(moje_imie, tresc_guild)
-
+    g_game.talkChannel(7, 0, message:sub(4))
     return
   end
 
