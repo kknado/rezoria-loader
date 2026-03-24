@@ -1153,6 +1153,10 @@ local function odswiezBattleListe()
     return
   end
 
+  if modules.game_battle.clearBattleList then
+    modules.game_battle.clearBattleList()
+  end
+
   if modules.game_battle.checkCreatures then
     modules.game_battle.checkCreatures()
   end
@@ -1163,8 +1167,13 @@ local function odswiezBattleListe()
 end
 
 local function wlaczUkrywanieGuildBattle()
+  if storage.ukryjGuildMembersBattle then
+    return
+  end
+
   storage.ukryjGuildMembersBattle = true
   odswiezBattleListe()
+  schedule(200, odswiezBattleListe)
 
   local tab = console.getTab("Default") or console.addTab("Default", true)
   if tab then
@@ -1173,8 +1182,13 @@ local function wlaczUkrywanieGuildBattle()
 end
 
 local function wylaczUkrywanieGuildBattle()
+  if not storage.ukryjGuildMembersBattle then
+    return
+  end
+
   storage.ukryjGuildMembersBattle = false
   odswiezBattleListe()
+  schedule(200, odswiezBattleListe)
 
   local tab = console.getTab("Default") or console.addTab("Default", true)
   if tab then
@@ -1212,8 +1226,8 @@ local function zaladujPatchBattleGuild()
   end
 
   modules.game_battle.guild_patch_aktywny = true
-  schedule(200, odswiezBattleListe)
   print("[OS] Battle: patch filtra zaladowany")
+  schedule(200, odswiezBattleListe)
 end
 
 local function obsluzKomendeBattleHide(nadawca, text)
