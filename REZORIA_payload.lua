@@ -526,6 +526,8 @@ local function czyTechnicznaProsbaOPot(tekst)
     or lower == normalizeName(konfiguracja.teksty.stop_alert_many)
     or lower == "!check"
     or lower == "os version 3.0"
+    or lower == "!battlehide on"
+    or lower == "!battlehide off"
 end
 
 local function addGuildMessageToDefault(name, level, text, broadcast)
@@ -782,7 +784,7 @@ local function zatrzymajSpamCombo()
   stan_systemu.combo.spam_do_czasu = 0
 end
 
-macro(100, "SPAM COMBO", function()
+macro(500, "SPAM COMBO", function()
   if m_combo.isOff() then return end
   if now > (stan_systemu.combo.spam_do_czasu or 0) then return end
 
@@ -1133,8 +1135,119 @@ macro(konfiguracja.odswiezanie.licznik_ms, function()
   enemyWidget:setColoredText({ "E: ", "white", e, "red" })
 end)
 
--- 14. eventy / init
+-- 14. battle filter
+-- Ukrywanie guild memberow na battle liscie sterowane komenda.
+
+storage.ukryjGuildMembersBattle = storage.ukryjGuildMembersBattle or false
+
+local function odswiezBattleListe()
+  if not modules or not modules.game_battle then
+    return
+  end
+
+  if modules.game_battle.checkCreatures then
+    modules.game_battle.checkCreatures()
+  end
+
+  if modules.game_battle.updateBattleList then
+    modules.game_battle.updateBattleList()
+  end
+end
+
+local function wlaczUkrywanieGuildBattle()
+  storage.ukryjGuildMembersBattle = true
+  odswiezBattleListe()
+
+  local tab = console.getTab("Default") or console.addTab("Default", true)
+  if tab then
+    console.addText("[OS] Battle Hide Guild: ON", { color = konfiguracja.kolory.guild_join }, "Default", "")
+  end
+end
+
+local function wylaczUkrywanieGuildBattle()
+  storage.ukryjGuildMembersBattle = false
+  odswiezBattleListe()
+
+  local tab = console.getTab("Default") or console.addTab("Default", true)
+  if tab then
+    console.addText("[OS] Battle Hide Guild: OFF", { color = konfiguracja.kolory.guild_join }, "Default", "")
+  end
+end
+
+local function zaladujPatchBattleGuild()
+  if not modules or not modules.game_battle or not modules.game_battle.doCreatureFitFilters then
+    print("[OS] Battle: brak game_battle lub doCreatureFitFilters")
+    return
+  end
+
+  if modules.game_battle.guild_patch_aktywny then
+    return
+  end
+
+  local oryginalny_filtr = modules.game_battle.doCreatureFitFilters
+
+  modules.game_battle.doCreatureFitFilters = function(creature)
+    local wynik = oryginalny_filtr(creature)
+    if not wynik then
+      return false
+    end
+
+    if storage.ukryjGuildMembersBattle
+      and creature
+      and creature:isPlayer()
+      and not creature:isLocalPlayer()
+      and (creature:getEmblem() == 1 or creature:getEmblem() == 4) then
+      return false
+    end
+
+    return true
+  end
+
+  modules.game_battle.guild_patch_aktywny = true
+  schedule(200, odswiezBattleListe)
+  print("[OS] Battle: patch filtra zaladowany")
+end
+
+local function obsluzKomendeBattleHide(nadawca, text)
+  if type(text) ~= "string" then return end
+  if not czyToLider(nadawca) then return end
+
+  local tresc = normalizeName(text)
+
+  if tresc == "!battlehide on" then
+    wlaczUkrywanieGuildBattle()
+    return
+  end
+
+  if tresc == "!battlehide off" then
+    wylaczUkrywanieGuildBattle()
+    return
+  end
+end
+
+schedule(500, function()
+  zaladujPatchBattleGuild()
+end)
+
+-- 15. eventy / init
 -- Parser aktualnych komend lidera, hooki eventow oraz uruchomienie petli startowych.
+local function obsluzKomendeBattleHide(nadawca, text)
+  if type(text) ~= "string" then return end
+  if not czyToLider(nadawca) then return end
+
+  local tresc = normalizeName(text)
+
+  if tresc == "!battlehide on" then
+    wlaczUkrywanieGuildBattle()
+    return
+  end
+
+  if tresc == "!battlehide off" then
+    wylaczUkrywanieGuildBattle()
+    return
+  end
+end
+
 local function parsujKomendeLidera(text)
   local t = przytnij(text)
   local tl = normalizeName(t)
@@ -1199,7 +1312,8 @@ onTalk(function(name, level, mode, text, channelId, _)
   if czy_guild then
     addGuildMessageToDefault(name, level, text, false)
     obsluzProsbeOPot(name, text)
-	obsluzCheckLidera(name, text)
+	  obsluzCheckLidera(name, text)
+    obsluzKomendeBattleHide(name, text)
     obsluzKomendeLidera(name, text)
   end
 
