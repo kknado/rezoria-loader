@@ -649,17 +649,10 @@ local function wykonajSioNaGraczuZGildii()
   local lp = pobierzLokalnegoGracza()
   if not lp then return false end
 
-  local myPos = lp:getPosition()
-
   for _, creature in ipairs(getSpectators()) do
     if czyGraczZGildii(creature) and creature:getHealthPercent() <= 80 then
       if stan_systemu.zawod.moj == "ED" and manapercent() > 85 then
         saySpell('exura sio "' .. creature:getName() .. '"', 100)
-        return true
-      end
-
-      if stan_systemu.zawod.moj == "RP" and hppercent() > 90 and czyStoiObok(creature, myPos) then
-        useWith(7642, creature)
         return true
       end
     end
@@ -672,6 +665,26 @@ local function wyslijAlertManyJesliTrzeba()
   local zawod = stan_systemu.zawod.moj
   if zawod ~= "ED" and zawod ~= "MS" and zawod ~= "RP" then return end
   if not czyKtosZGildiiStoiObok() then return end
+
+  if zawod == "RP" then
+    local trzeba_p = manapercent() <= 75 or hppercent() <= 65
+    local trzeba_x = manapercent() > 85 and hppercent() > 80
+
+    if trzeba_p and stan_systemu.healing.ostatni_alert_many ~= 1 then
+      if wyslijWiadomoscGildii(konfiguracja.teksty.alert_many) then
+        stan_systemu.healing.ostatni_alert_many = 1
+      end
+      return
+    end
+
+    if trzeba_x and stan_systemu.healing.ostatni_alert_many ~= 0 then
+      if wyslijWiadomoscGildii(konfiguracja.teksty.stop_alert_many) then
+        stan_systemu.healing.ostatni_alert_many = 0
+      end
+    end
+
+    return
+  end
 
   if manapercent() <= 75 and stan_systemu.healing.ostatni_alert_many ~= 1 then
     if wyslijWiadomoscGildii(konfiguracja.teksty.alert_many) then
